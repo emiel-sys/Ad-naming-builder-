@@ -298,7 +298,8 @@ app.delete('/api/archive/:index', (req, res) => {
 if (isProd) {
   const distPath = join(__dirname, 'dist');
   app.use(express.static(distPath));
-  app.get('/*', (req, res) => {
+  // SPA fallback — serve index.html for all non-API routes
+  app.use((req, res) => {
     res.sendFile(join(distPath, 'index.html'));
   });
 }

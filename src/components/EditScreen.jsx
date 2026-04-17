@@ -17,6 +17,9 @@ export default function EditScreen({ result, onSave, onBack }) {
         feedback.trim() && `[Name edit] ${feedback.trim()}`,
       ].filter(Boolean).join(' • ');
 
+      const content_type = result.analysis?.step2_field_classification?.content_type?.value || null;
+      const theme = result.analysis?.step2_field_classification?.theme?.value || null;
+
       const res = await fetch('/api/archive', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -26,6 +29,8 @@ export default function EditScreen({ result, onSave, onBack }) {
           approved_name: name,
           feedback: combined || null,
           image_preview: result.imagePreview,
+          content_type,
+          theme,
         }),
       });
       if (!res.ok) throw new Error('Save failed');

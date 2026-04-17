@@ -880,3 +880,324 @@ body {
   border-radius: 4px;
   font-size: 11px;
 }
+
+/* ===== Archive — new folder layout ===== */
+
+.archive-layout {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  width: 100%;
+}
+
+/* ── Sidebar ── */
+.archive-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  position: sticky;
+  top: 0;
+  max-height: calc(100vh - 130px);
+  overflow-y: auto;
+}
+
+.sidebar-section-label {
+  padding: 8px 14px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--gray-400);
+}
+
+.sidebar-divider {
+  height: 1px;
+  background: var(--gray-100);
+  margin: 4px 0;
+}
+
+.sidebar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gray-700);
+  transition: background 0.12s;
+  user-select: none;
+}
+
+.sidebar-row:hover { background: var(--gray-50); }
+
+.sidebar-row.active {
+  background: var(--sitly-purple-bg);
+  color: var(--sitly-purple);
+  font-weight: 600;
+}
+
+.sidebar-row.disabled {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
+}
+
+.sidebar-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--gray-400);
+  background: var(--gray-100);
+  padding: 1px 7px;
+  border-radius: 10px;
+}
+
+.sidebar-row.active .sidebar-count {
+  background: rgba(108, 60, 224, 0.15);
+  color: var(--sitly-purple);
+}
+
+.sidebar-chevron {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gray-400);
+  transition: transform 0.18s;
+  display: inline-block;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.sidebar-chevron.open { transform: rotate(90deg); }
+
+.sidebar-theme-row {
+  padding-left: 32px;
+  font-size: 12px;
+  color: var(--gray-600);
+}
+
+.sidebar-theme-row.active {
+  background: var(--sitly-purple-bg);
+  color: var(--sitly-purple);
+}
+
+.sidebar-notfound { color: var(--gray-500); }
+
+/* ── Main content ── */
+.archive-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.archive-topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.archive-folder-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--gray-900);
+  margin-bottom: 2px;
+}
+
+.archive-search-input {
+  padding: 10px 16px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  font-size: 14px;
+  width: 280px;
+  background: white;
+  color: var(--gray-800);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+}
+
+.archive-search-input:focus {
+  border-color: var(--sitly-purple);
+  box-shadow: 0 0 0 3px rgba(108, 60, 224, 0.1);
+}
+
+/* ── Entry cards ── */
+.archive-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.archive-entry {
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  transition: border-color 0.15s;
+  flex-wrap: wrap;
+}
+
+.archive-entry:hover { border-color: var(--gray-300); }
+
+.entry-thumb {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--gray-200);
+  background: var(--gray-100);
+}
+
+.entry-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.thumb-empty {
+  width: 100%;
+  height: 100%;
+  background: var(--gray-100);
+}
+
+.entry-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.entry-name {
+  display: block;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sitly-purple);
+  background: var(--sitly-purple-bg);
+  padding: 3px 8px;
+  border-radius: 4px;
+  word-break: break-all;
+  margin-bottom: 6px;
+}
+
+.entry-desc {
+  font-size: 12px;
+  color: var(--gray-500);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.entry-feedback {
+  font-size: 11px;
+  color: var(--sitly-purple);
+  font-style: italic;
+}
+
+.entry-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.entry-date {
+  font-size: 11px;
+  color: var(--gray-400);
+  white-space: nowrap;
+}
+
+.entry-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-move {
+  padding: 4px 10px;
+  border: 1px solid var(--gray-200);
+  background: white;
+  color: var(--gray-600);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-move:hover {
+  border-color: var(--sitly-purple);
+  color: var(--sitly-purple);
+}
+
+/* ── Move panel (inline expand) ── */
+.move-panel {
+  width: 100%;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--gray-50);
+  border-radius: var(--radius);
+  border: 1px solid var(--gray-200);
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.move-panel select {
+  padding: 6px 10px;
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  font-size: 13px;
+  background: white;
+  color: var(--gray-700);
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.move-panel select:focus { border-color: var(--sitly-purple); }
+
+.btn-confirm {
+  padding: 6px 14px;
+  background: var(--sitly-purple);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-confirm:hover { background: var(--sitly-purple-light); }
+
+.btn-cancel-sm {
+  padding: 6px 12px;
+  background: white;
+  color: var(--gray-600);
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-cancel-sm:hover { background: var(--gray-50); }

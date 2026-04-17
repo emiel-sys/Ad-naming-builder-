@@ -6,8 +6,10 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ARCHIVE_PATH = join(__dirname, 'archive.json');
 const isProd = process.env.NODE_ENV === 'production';
+// In production, write to /data (Railway persistent volume). Locally use the repo root.
+const DATA_DIR = isProd ? '/data' : __dirname;
+const ARCHIVE_PATH = join(DATA_DIR, 'archive.json');
 
 const app = express();
 if (!isProd) app.use(cors());
@@ -274,7 +276,7 @@ app.get('/api/archive', (req, res) => {
 
 // Save to archive
 app.post('/api/archive', (req, res) => {
-  const { image_description, generated_name, approved_name, feedback, image_preview } = req.body;
+  const { image_description, generated_name, approved_name, feedback, image_preview, content_type, theme } = req.body;
   if (!image_description || !approved_name) {
     return res.status(400).json({ error: 'Missing fields' });
   }
@@ -285,10 +287,29 @@ app.post('/api/archive', (req, res) => {
     approved_name,
     feedback: feedback || null,
     image_preview: image_preview || null,
+    content_type: content_type || null,
+    theme: theme || null,
     saved_at: new Date().toISOString(),
   });
   saveArchive(archive);
   res.json({ success: true, count: archive.length });
+});
+
+// Move archive entry to a different folder (update content_type + theme)
+app.patch('/api/archive/:index', (req, res) => {
+  const archive = loadArchive();
+  const index = parseInt(req.params.index);
+  if (isNaN(index) || index < 0 || index >= archive.length) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  const { content_type, theme } = req.body;
+  archive[index] = {
+    ...archive[index],
+    content_type: content_type || null,
+    theme: theme || null,
+  };
+  saveArchive(archive);
+  res.json({ success: true });
 });
 
 // Delete from archive

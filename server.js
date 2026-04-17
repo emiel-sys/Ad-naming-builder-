@@ -394,6 +394,27 @@ app.post('/api/analyze', async (req, res) => {
   }
 });
 
+// Health check — shows DB mode and entry count
+app.get('/api/health', async (req, res) => {
+  const info = {
+    db_mode: USE_DB ? 'postgresql' : 'json_file',
+    database_url_set: !!process.env.DATABASE_URL,
+  };
+  if (USE_DB) {
+    try {
+      const result = await pool.query('SELECT COUNT(*) FROM archive');
+      info.entry_count = parseInt(result.rows[0].count);
+      info.db_connected = true;
+    } catch (err) {
+      info.db_connected = false;
+      info.db_error = err.message;
+    }
+  } else {
+    info.entry_count = loadArchiveFile().length;
+  }
+  res.json(info);
+});
+
 // Get archive
 app.get('/api/archive', async (req, res) => {
   try {

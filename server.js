@@ -7,8 +7,10 @@ import { dirname, join } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isProd = process.env.NODE_ENV === 'production';
-// In production, write to /data (Railway persistent volume). Locally use the repo root.
-const DATA_DIR = isProd ? '/data' : __dirname;
+// In production, write to /app/data (Railway persistent volume mounted here).
+// /app is the nixpacks working directory and always exists in the container.
+// Locally use the repo root.
+const DATA_DIR = isProd ? join(__dirname, 'data') : __dirname;
 const ARCHIVE_PATH = join(DATA_DIR, 'archive.json');
 // Ensure the data directory exists (important when /data volume is not yet mounted)
 try {

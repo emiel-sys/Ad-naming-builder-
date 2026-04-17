@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import Anthropic from '@anthropic-ai/sdk';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -10,6 +10,8 @@ const isProd = process.env.NODE_ENV === 'production';
 // In production, write to /data (Railway persistent volume). Locally use the repo root.
 const DATA_DIR = isProd ? '/data' : __dirname;
 const ARCHIVE_PATH = join(DATA_DIR, 'archive.json');
+// Ensure the data directory exists (important when /data volume is not yet mounted)
+mkdirSync(DATA_DIR, { recursive: true });
 
 const app = express();
 if (!isProd) app.use(cors());
@@ -276,23 +278,28 @@ app.get('/api/archive', (req, res) => {
 
 // Save to archive
 app.post('/api/archive', (req, res) => {
-  const { image_description, generated_name, approved_name, feedback, image_preview, content_type, theme } = req.body;
-  if (!image_description || !approved_name) {
-    return res.status(400).json({ error: 'Missing fields' });
+  try {
+    const { image_description, generated_name, approved_name, feedback, image_preview, content_type, theme } = req.body;
+    if (!image_description || !approved_name) {
+      return res.status(400).json({ error: 'Missing fields' });
+    }
+    const archive = loadArchive();
+    archive.push({
+      image_description,
+      generated_name: generated_name || null,
+      approved_name,
+      feedback: feedback || null,
+      image_preview: image_preview || null,
+      content_type: content_type || null,
+      theme: theme || null,
+      saved_at: new Date().toISOString(),
+    });
+    saveArchive(archive);
+    res.json({ success: true, count: archive.length });
+  } catch (err) {
+    console.error('Archive save error:', err);
+    res.status(500).json({ error: err.message });
   }
-  const archive = loadArchive();
-  archive.push({
-    image_description,
-    generated_name: generated_name || null,
-    approved_name,
-    feedback: feedback || null,
-    image_preview: image_preview || null,
-    content_type: content_type || null,
-    theme: theme || null,
-    saved_at: new Date().toISOString(),
-  });
-  saveArchive(archive);
-  res.json({ success: true, count: archive.length });
 });
 
 // Move archive entry to a different folder (update content_type + theme)

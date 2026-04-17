@@ -201,6 +201,66 @@ function saveArchiveFile(entries) {
   writeFileSync(ARCHIVE_PATH, JSON.stringify(clean, null, 2));
 }
 
+// ── ClickUp integration ──────────────────────────────────────────────────────
+async function createClickUpTask(analysis) {
+  const token = process.env.CLICKUP_API_TOKEN;
+  if (!token) {
+    console.warn('CLICKUP_API_TOKEN not set — skipping ClickUp task creation');
+    return;
+  }
+
+  const title = analysis.step5_generated_name || 'Unnamed Ad';
+
+  const fc   = analysis.step2_field_classification || {};
+  const conf = analysis.step4_confidence           || {};
+  const fields = ['content_type', 'theme', 'sub_theme', 'asset_variation', 'message'];
+
+  const classificationLines = fields.map(f => {
+    const val    = fc[f]?.value  || '—';
+    const reason = fc[f]?.reason || '—';
+    return `• ${f}: ${val} — ${reason}`;
+  }).join('\n');
+
+  const confidenceLines = fields.map(f => {
+    const status = conf[f]?.status || '—';
+    const note   = conf[f]?.note   || '—';
+    const icon   = status === 'certain' ? '✅' : '⚠️';
+    return `• ${f}: ${icon} ${status} — ${note}`;
+  }).join('\n');
+
+  const description = [
+    '📸 Image Description',
+    analysis.step1_image_description || '—',
+    '',
+    '🏷️ Field Classification',
+    classificationLines,
+    '',
+    '📁 Archive Check',
+    analysis.step3_archive_check || '—',
+    '',
+    '🔍 Confidence',
+    confidenceLines,
+  ].join('\n');
+
+  const clickupRes = await fetch('https://api.clickup.com/api/v2/list/901522863692/task', {
+    method: 'POST',
+    headers: {
+      'Authorization': token,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ name: title, description }),
+  });
+
+  if (!clickupRes.ok) {
+    const errText = await clickupRes.text();
+    throw new Error(`ClickUp API ${clickupRes.status}: ${errText}`);
+  }
+
+  const task = await clickupRes.json();
+  console.log(`ClickUp task created: ${task.id} — ${title}`);
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Analyze image
 app.post('/api/analyze', async (req, res) => {
   try {
@@ -297,6 +357,11 @@ app.post('/api/analyze', async (req, res) => {
     }
 
     res.json({ analysis: parsed });
+
+    // Fire-and-forget: create ClickUp task without blocking the response
+    createClickUpTask(parsed).catch(err =>
+      console.error('ClickUp task creation failed:', err.message)
+    );
   } catch (error) {
     console.error('Analysis error:', error);
     res.status(500).json({ error: error.message });

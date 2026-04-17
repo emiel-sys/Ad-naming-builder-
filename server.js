@@ -202,7 +202,7 @@ function saveArchiveFile(entries) {
 }
 
 // ── ClickUp integration ──────────────────────────────────────────────────────
-async function createClickUpTask(analysis) {
+async function createClickUpTask(analysis, image_base64, media_type) {
   const token = process.env.CLICKUP_API_TOKEN;
   if (!token) {
     console.warn('CLICKUP_API_TOKEN not set — skipping ClickUp task creation');
@@ -258,6 +258,32 @@ async function createClickUpTask(analysis) {
 
   const task = await clickupRes.json();
   console.log(`ClickUp task created: ${task.id} — ${title}`);
+
+  // Attach the ad image to the task
+  if (image_base64 && task.id) {
+    try {
+      const mimeType = media_type || 'image/jpeg';
+      const ext = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
+      const imageBuffer = Buffer.from(image_base64, 'base64');
+      const form = new FormData();
+      form.append('attachment', new Blob([imageBuffer], { type: mimeType }), `ad_${task.id}.${ext}`);
+
+      const attachRes = await fetch(`https://api.clickup.com/api/v2/task/${task.id}/attachment`, {
+        method: 'POST',
+        headers: { 'Authorization': token },
+        body: form,
+      });
+
+      if (!attachRes.ok) {
+        const errText = await attachRes.text();
+        console.error(`ClickUp attachment failed ${attachRes.status}: ${errText}`);
+      } else {
+        console.log(`ClickUp image attached to task ${task.id}`);
+      }
+    } catch (err) {
+      console.error('ClickUp attachment error:', err.message);
+    }
+  }
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -359,7 +385,7 @@ app.post('/api/analyze', async (req, res) => {
     res.json({ analysis: parsed });
 
     // Fire-and-forget: create ClickUp task without blocking the response
-    createClickUpTask(parsed).catch(err =>
+    createClickUpTask(parsed, image_base64, media_type).catch(err =>
       console.error('ClickUp task creation failed:', err.message)
     );
   } catch (error) {

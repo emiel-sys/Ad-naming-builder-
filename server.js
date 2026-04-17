@@ -1,22 +1,39 @@
 import express from 'express';
 import cors from 'cors';
 import Anthropic from '@anthropic-ai/sdk';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import pg from 'pg';
 
+const { Pool } = pg;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isProd = process.env.NODE_ENV === 'production';
-// In production, write to /app/data (Railway persistent volume mounted here).
-// /app is the nixpacks working directory and always exists in the container.
-// Locally use the repo root.
-const DATA_DIR = isProd ? join(__dirname, 'data') : __dirname;
-const ARCHIVE_PATH = join(DATA_DIR, 'archive.json');
-// Ensure the data directory exists (important when /data volume is not yet mounted)
-try {
-  mkdirSync(DATA_DIR, { recursive: true });
-} catch (err) {
-  console.warn('Could not create DATA_DIR:', err.message);
+
+// Use PostgreSQL when DATABASE_URL is available (production), else fall back to JSON file (local dev)
+const USE_DB = !!process.env.DATABASE_URL;
+const ARCHIVE_PATH = join(__dirname, 'archive.json'); // local fallback only
+
+let pool;
+if (USE_DB) {
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
+  });
+  // Create table if it doesn't exist yet
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS archive (
+      id        SERIAL PRIMARY KEY,
+      image_description TEXT,
+      generated_name    TEXT,
+      approved_name     TEXT NOT NULL,
+      feedback          TEXT,
+      image_preview     TEXT,
+      content_type      TEXT,
+      theme             TEXT,
+      saved_at          TIMESTAMPTZ DEFAULT NOW()
+    )
+  `).catch(err => console.error('DB init error:', err.message));
 }
 
 const app = express();
@@ -168,17 +185,20 @@ ALWAYS answer in the following JSON format (no markdown, pure JSON):
   "step5_generated_name": "..."
 }`;
 
-function loadArchive() {
+// JSON file fallback (local dev only)
+function loadArchiveFile() {
   if (!existsSync(ARCHIVE_PATH)) return [];
   try {
-    return JSON.parse(readFileSync(ARCHIVE_PATH, 'utf-8'));
-  } catch {
-    return [];
-  }
+    const data = JSON.parse(readFileSync(ARCHIVE_PATH, 'utf-8'));
+    // Attach array index as id so endpoints work the same way
+    return data.map((entry, i) => ({ ...entry, id: i }));
+  } catch { return []; }
 }
 
-function saveArchive(archive) {
-  writeFileSync(ARCHIVE_PATH, JSON.stringify(archive, null, 2));
+function saveArchiveFile(entries) {
+  // Strip the id field (synthetic) before persisting
+  const clean = entries.map(({ id, ...rest }) => rest);
+  writeFileSync(ARCHIVE_PATH, JSON.stringify(clean, null, 2));
 }
 
 // Analyze image
@@ -190,16 +210,22 @@ app.post('/api/analyze', async (req, res) => {
       return res.status(400).json({ error: 'Missing image or asset_type' });
     }
 
-    const archive = loadArchive();
-    // Strip image_preview and limit to last 10 entries to save tokens
-    const archiveLite = archive
-      .slice(-10)
-      .map(({ image_preview, ...rest }) => rest);
+    let archive;
+    if (USE_DB) {
+      const result = await pool.query(
+        'SELECT image_description, generated_name, approved_name, feedback, content_type, theme FROM archive ORDER BY saved_at DESC LIMIT 10'
+      );
+      archive = result.rows;
+    } else {
+      archive = loadArchiveFile().slice(-10);
+    }
+
+    // Strip image_preview and use last 10 entries for context
+    const archiveLite = archive.map(({ image_preview, id, ...rest }) => rest);
 
     // Extract feedback entries where the user corrected the generated name
     const feedbackEntries = archive
       .filter(e => e.feedback && e.generated_name && e.generated_name !== e.approved_name)
-      .slice(-10)
       .map(e => ({
         original_name: e.generated_name,
         corrected_name: e.approved_name,
@@ -278,29 +304,38 @@ app.post('/api/analyze', async (req, res) => {
 });
 
 // Get archive
-app.get('/api/archive', (req, res) => {
-  res.json(loadArchive());
+app.get('/api/archive', async (req, res) => {
+  try {
+    if (USE_DB) {
+      const result = await pool.query('SELECT * FROM archive ORDER BY saved_at ASC');
+      return res.json(result.rows);
+    }
+    res.json(loadArchiveFile());
+  } catch (err) {
+    console.error('Archive fetch error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Save to archive
-app.post('/api/archive', (req, res) => {
+app.post('/api/archive', async (req, res) => {
   try {
     const { image_description, generated_name, approved_name, feedback, image_preview, content_type, theme } = req.body;
     if (!image_description || !approved_name) {
       return res.status(400).json({ error: 'Missing fields' });
     }
-    const archive = loadArchive();
-    archive.push({
-      image_description,
-      generated_name: generated_name || null,
-      approved_name,
-      feedback: feedback || null,
-      image_preview: image_preview || null,
-      content_type: content_type || null,
-      theme: theme || null,
-      saved_at: new Date().toISOString(),
-    });
-    saveArchive(archive);
+    if (USE_DB) {
+      const result = await pool.query(
+        `INSERT INTO archive (image_description, generated_name, approved_name, feedback, image_preview, content_type, theme)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [image_description, generated_name || null, approved_name, feedback || null, image_preview || null, content_type || null, theme || null]
+      );
+      const count = await pool.query('SELECT COUNT(*) FROM archive');
+      return res.json({ success: true, count: parseInt(count.rows[0].count) });
+    }
+    const archive = loadArchiveFile();
+    archive.push({ image_description, generated_name: generated_name || null, approved_name, feedback: feedback || null, image_preview: image_preview || null, content_type: content_type || null, theme: theme || null, saved_at: new Date().toISOString() });
+    saveArchiveFile(archive);
     res.json({ success: true, count: archive.length });
   } catch (err) {
     console.error('Archive save error:', err);
@@ -309,32 +344,45 @@ app.post('/api/archive', (req, res) => {
 });
 
 // Move archive entry to a different folder (update content_type + theme)
-app.patch('/api/archive/:index', (req, res) => {
-  const archive = loadArchive();
-  const index = parseInt(req.params.index);
-  if (isNaN(index) || index < 0 || index >= archive.length) {
-    return res.status(404).json({ error: 'Not found' });
+app.patch('/api/archive/:id', async (req, res) => {
+  try {
+    const { content_type, theme } = req.body;
+    if (USE_DB) {
+      const result = await pool.query(
+        'UPDATE archive SET content_type=$1, theme=$2 WHERE id=$3',
+        [content_type || null, theme || null, req.params.id]
+      );
+      if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
+      return res.json({ success: true });
+    }
+    const archive = loadArchiveFile();
+    const index = parseInt(req.params.id);
+    if (isNaN(index) || index < 0 || index >= archive.length) return res.status(404).json({ error: 'Not found' });
+    archive[index] = { ...archive[index], content_type: content_type || null, theme: theme || null };
+    saveArchiveFile(archive);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-  const { content_type, theme } = req.body;
-  archive[index] = {
-    ...archive[index],
-    content_type: content_type || null,
-    theme: theme || null,
-  };
-  saveArchive(archive);
-  res.json({ success: true });
 });
 
 // Delete from archive
-app.delete('/api/archive/:index', (req, res) => {
-  const archive = loadArchive();
-  const index = parseInt(req.params.index);
-  if (index < 0 || index >= archive.length) {
-    return res.status(404).json({ error: 'Not found' });
+app.delete('/api/archive/:id', async (req, res) => {
+  try {
+    if (USE_DB) {
+      const result = await pool.query('DELETE FROM archive WHERE id=$1', [req.params.id]);
+      if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
+      return res.json({ success: true });
+    }
+    const archive = loadArchiveFile();
+    const index = parseInt(req.params.id);
+    if (index < 0 || index >= archive.length) return res.status(404).json({ error: 'Not found' });
+    archive.splice(index, 1);
+    saveArchiveFile(archive);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-  archive.splice(index, 1);
-  saveArchive(archive);
-  res.json({ success: true });
 });
 
 // Serve React build in production

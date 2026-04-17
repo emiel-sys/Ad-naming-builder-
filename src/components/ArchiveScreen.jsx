@@ -81,7 +81,8 @@ export default function ArchiveScreen() {
 
   // Filter entries based on selected folder + search query
   const displayedEntries = useMemo(() => {
-    let entries = archive.map((e, i) => ({ ...e, _idx: i }));
+    // id comes from the DB (serial) or is injected as array index in local fallback
+    let entries = archive.map((e, i) => ({ ...e, id: e.id ?? i }));
 
     if (selectedFolder === 'not_found') {
       entries = entries.filter(e => !getEntryContentType(e));
@@ -225,7 +226,7 @@ export default function ArchiveScreen() {
         ) : (
           <div className="archive-list">
             {displayedEntries.map(entry => (
-              <div key={entry._idx} className="archive-entry">
+              <div key={entry.id} className="archive-entry">
                 <div className="entry-thumb">
                   {entry.image_preview
                     ? <img src={entry.image_preview} alt="Ad thumbnail" />
@@ -245,7 +246,7 @@ export default function ArchiveScreen() {
                     <button
                       className="btn-move"
                       onClick={() => {
-                        setMovingIndex(entry._idx);
+                        setMovingIndex(entry.id);
                         setMoveValues({
                           content_type: getEntryContentType(entry) || '',
                           theme: getEntryTheme(entry) || '',
@@ -254,11 +255,11 @@ export default function ArchiveScreen() {
                     >
                       Move
                     </button>
-                    <button className="btn-delete" onClick={() => handleDelete(entry._idx)}>×</button>
+                    <button className="btn-delete" onClick={() => handleDelete(entry.id)}>×</button>
                   </div>
                 </div>
 
-                {movingIndex === entry._idx && (
+                {movingIndex === entry.id && (
                   <div className="move-panel">
                     <select
                       value={moveValues.content_type}

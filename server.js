@@ -11,7 +11,11 @@ const isProd = process.env.NODE_ENV === 'production';
 const DATA_DIR = isProd ? '/data' : __dirname;
 const ARCHIVE_PATH = join(DATA_DIR, 'archive.json');
 // Ensure the data directory exists (important when /data volume is not yet mounted)
-mkdirSync(DATA_DIR, { recursive: true });
+try {
+  mkdirSync(DATA_DIR, { recursive: true });
+} catch (err) {
+  console.warn('Could not create DATA_DIR:', err.message);
+}
 
 const app = express();
 if (!isProd) app.use(cors());

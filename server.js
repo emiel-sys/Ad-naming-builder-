@@ -498,6 +498,7 @@ app.delete('/api/archive/:id', async (req, res) => {
 });
 
 // Serve React build in production
+
 if (isProd) {
   const distPath = join(__dirname, 'dist');
   app.use(express.static(distPath));

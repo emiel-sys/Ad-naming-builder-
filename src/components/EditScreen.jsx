@@ -11,6 +11,12 @@ export default function EditScreen({ result, onSave, onBack }) {
   async function handleSave() {
     setSaving(true);
     try {
+      // Combine Step 2 feedback (field corrections) with Edit-screen feedback (name tweaks)
+      const combined = [
+        result.step2Feedback?.trim() && `[Step 2 field changes] ${result.step2Feedback.trim()}`,
+        feedback.trim() && `[Name edit] ${feedback.trim()}`,
+      ].filter(Boolean).join(' • ');
+
       const res = await fetch('/api/archive', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -18,7 +24,7 @@ export default function EditScreen({ result, onSave, onBack }) {
           image_description: result.imageDescription,
           generated_name: result.generatedName,
           approved_name: name,
-          feedback: feedback.trim() || null,
+          feedback: combined || null,
           image_preview: result.imagePreview,
         }),
       });

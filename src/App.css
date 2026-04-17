@@ -799,3 +799,84 @@ body {
     position: static;
   }
 }
+
+/* ── Editable Step 2 fields ─────────────────────────────────────────────── */
+.step-hint {
+  font-size: 12px;
+  color: var(--gray-500);
+  margin-bottom: 12px;
+  font-style: italic;
+}
+
+.field-select,
+.field-input {
+  padding: 6px 10px;
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sitly-purple);
+  background: var(--sitly-purple-bg);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  max-width: 100%;
+}
+
+.field-select:hover,
+.field-input:hover {
+  border-color: var(--sitly-purple);
+}
+
+.field-select:focus,
+.field-input:focus {
+  outline: none;
+  border-color: var(--sitly-purple);
+  box-shadow: 0 0 0 3px rgba(108, 60, 224, 0.12);
+}
+
+.field-select.changed,
+.field-input.changed {
+  background: #fff7ed;
+  border-color: #f59e0b;
+  color: #b45309;
+}
+
+.field-table tr.row-changed {
+  background: #fffbeb;
+}
+
+.changed-marker {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #b45309;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: help;
+}
+
+/* ── Step 2 → Step 3 feedback card ──────────────────────────────────────── */
+.step-card-feedback {
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+
+.step-card-feedback h3 {
+  color: #b45309;
+}
+
+.step-card-feedback .step-hint {
+  color: var(--gray-700);
+  font-style: normal;
+}
+
+.step-card-feedback code {
+  background: white;
+  border: 1px solid #fcd34d;
+  color: #b45309;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}

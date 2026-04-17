@@ -8,19 +8,83 @@ const STEP_LABELS = [
   'Output',
 ];
 
+// Valid options per field — keep in sync with server.js SYSTEM_PROMPT
+const FIELD_OPTIONS = {
+  content_type: ['influencer', 'ugc', 'ambassador', 'graphic', 'photo', 'inhouse', 'stock'],
+  theme: [
+    'money_related', 'emotional_value', 'product_feature', 'time_related',
+    'emotional_connection', 'practical_support', 'product_features',
+  ],
+  sub_theme: [
+    'easy_job', 'make_money', 'flexible_job', 'meaningful_job', 'fun_job',
+    'easy_signup', 'find_nearby', 'me_time', 'work_balance', 'partner_time',
+    'help_tasks', 'special_skills', 'support_system', 'building_trust',
+    'safety_children', 'function_1', 'function_2',
+  ],
+  // asset_variation uses a static_template + _[NEED_HELP] suffix
+  asset_variation: [
+    'insight_led', 'sitter_profile', 'proof_based', 'product_mockup',
+    'tear_off_flyer', 'photo_outline', 'airdrop', 'meme', 'quote',
+    'parent_concerns', 'babysitter_available', 'babysitter_wanted',
+    'numbers_first',
+  ],
+};
+
+const NEED_HELP = '[NEED_HELP]';
+
+// Strip the _[NEED_HELP] suffix to show clean template name in the dropdown
+function stripVariationSuffix(value) {
+  if (!value) return '';
+  return value.replace(/_\[NEED_HELP\]$/, '').replace(/_\d+$/, '');
+}
+
+function buildVariationValue(template) {
+  if (!template) return '';
+  return `${template}_${NEED_HELP}`;
+}
+
 function ConfidenceBadge({ status }) {
   return status === 'certain'
     ? <span className="badge badge-ok">✅ Certain</span>
     : <span className="badge badge-warn">⚠️ Uncertain</span>;
 }
 
-export default function AnalysisScreen({ uploadData, onResult, onBack }) {
-  const [analysis, setAnalysis] = useState(null);
-  const [loading, setLoading] = useState(true);
+// Rebuild the generated name from the (possibly edited) field classification
+function buildGeneratedName(assetType, fields) {
+  const parts = [
+    assetType,
+    fields?.content_type?.value,
+    fields?.theme?.value,
+    fields?.sub_theme?.value,
+    fields?.asset_variation?.value,
+    fields?.message?.value,
+  ].filter(Boolean);
+  return parts.join('-');
+}
+
+export default function AnalysisScreen({
+  uploadData,
+  analysis,
+  setAnalysis,
+  originalAnalysis,
+  setOriginalAnalysis,
+  step2Feedback,
+  setStep2Feedback,
+  onResult,
+  onBack,
+}) {
+  const [loading, setLoading] = useState(!analysis);
   const [error, setError] = useState(null);
-  const [activeStep, setActiveStep] = useState(0);
+  const [activeStep, setActiveStep] = useState(analysis ? 4 : 0);
 
   useEffect(() => {
+    // If we already have an analysis (e.g. user came back from Edit), skip the API call
+    if (analysis) {
+      setLoading(false);
+      setActiveStep(4);
+      return;
+    }
+
     let cancelled = false;
 
     async function analyze() {
@@ -49,6 +113,8 @@ export default function AnalysisScreen({ uploadData, onResult, onBack }) {
         const data = await res.json();
         if (!cancelled) {
           setAnalysis(data.analysis);
+          // Deep-clone so originalAnalysis stays immutable for diff comparison
+          setOriginalAnalysis(JSON.parse(JSON.stringify(data.analysis)));
           setActiveStep(4);
           setLoading(false);
         }
@@ -62,7 +128,48 @@ export default function AnalysisScreen({ uploadData, onResult, onBack }) {
 
     analyze();
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uploadData]);
+
+  // Update a single Step 2 field — also recompute the generated name
+  function updateField(fieldName, newValue) {
+    setAnalysis((prev) => {
+      if (!prev) return prev;
+      const next = {
+        ...prev,
+        step2_field_classification: {
+          ...prev.step2_field_classification,
+          [fieldName]: {
+            ...prev.step2_field_classification[fieldName],
+            value: newValue,
+          },
+        },
+      };
+      next.step5_generated_name = buildGeneratedName(
+        uploadData.asset_type,
+        next.step2_field_classification
+      );
+      return next;
+    });
+  }
+
+  // Detect whether any Step 2 field has been changed compared to the original AI output
+  function hasFieldChanges() {
+    if (!analysis || !originalAnalysis) return false;
+    const cur = analysis.step2_field_classification || {};
+    const orig = originalAnalysis.step2_field_classification || {};
+    return Object.keys(cur).some((k) => cur[k]?.value !== orig[k]?.value);
+  }
+
+  // Build a human-readable summary of which fields changed (for the feedback hint)
+  function changeSummary() {
+    if (!analysis || !originalAnalysis) return [];
+    const cur = analysis.step2_field_classification || {};
+    const orig = originalAnalysis.step2_field_classification || {};
+    return Object.keys(cur)
+      .filter((k) => cur[k]?.value !== orig[k]?.value)
+      .map((k) => ({ field: k, from: orig[k]?.value, to: cur[k]?.value }));
+  }
 
   if (error) {
     return (
@@ -75,6 +182,9 @@ export default function AnalysisScreen({ uploadData, onResult, onBack }) {
       </div>
     );
   }
+
+  const fieldsChanged = hasFieldChanges();
+  const changes = changeSummary();
 
   return (
     <div className="analysis-screen">
@@ -114,21 +224,92 @@ export default function AnalysisScreen({ uploadData, onResult, onBack }) {
 
               <div className="step-card">
                 <h3>Step 2 — Field Classification</h3>
+                <p className="step-hint">Click any value to override the AI's choice.</p>
                 <table className="field-table">
                   <thead>
                     <tr><th>Field</th><th>Value</th><th>Reason</th></tr>
                   </thead>
                   <tbody>
-                    {Object.entries(analysis.step2_field_classification).map(([field, data]) => (
-                      <tr key={field}>
-                        <td className="field-name">{field}</td>
-                        <td><code>{data.value}</code></td>
-                        <td>{data.reason}</td>
-                      </tr>
-                    ))}
+                    {Object.entries(analysis.step2_field_classification).map(([field, data]) => {
+                      const origValue = originalAnalysis?.step2_field_classification?.[field]?.value;
+                      const isChanged = origValue !== undefined && origValue !== data.value;
+                      const options = FIELD_OPTIONS[field];
+
+                      return (
+                        <tr key={field} className={isChanged ? 'row-changed' : ''}>
+                          <td className="field-name">{field}</td>
+                          <td>
+                            {field === 'asset_variation' && options ? (
+                              <select
+                                className={`field-select ${isChanged ? 'changed' : ''}`}
+                                value={stripVariationSuffix(data.value)}
+                                onChange={(e) => updateField(field, buildVariationValue(e.target.value))}
+                              >
+                                {options.map((opt) => (
+                                  <option key={opt} value={opt}>{opt}_[NEED_HELP]</option>
+                                ))}
+                              </select>
+                            ) : options ? (
+                              <select
+                                className={`field-select ${isChanged ? 'changed' : ''}`}
+                                value={data.value || ''}
+                                onChange={(e) => updateField(field, e.target.value)}
+                              >
+                                {options.map((opt) => (
+                                  <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              // Free-text fields (message)
+                              <input
+                                type="text"
+                                className={`field-input ${isChanged ? 'changed' : ''}`}
+                                value={data.value || ''}
+                                onChange={(e) => updateField(field, e.target.value)}
+                                spellCheck={false}
+                              />
+                            )}
+                            {isChanged && (
+                              <span className="changed-marker" title={`AI suggested: ${origValue}`}>
+                                ✎ changed
+                              </span>
+                            )}
+                          </td>
+                          <td>{data.reason}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
+
+              {/* Feedback box — appears only when fields are edited */}
+              {fieldsChanged && (
+                <div className="step-card step-card-feedback">
+                  <h3>Feedback — help the AI learn</h3>
+                  <p className="step-hint">
+                    {changes.length === 1
+                      ? <>You changed <strong>{changes[0].field}</strong> from <code>{changes[0].from}</code> to <code>{changes[0].to}</code>.</>
+                      : <>You changed {changes.length} fields: {changes.map((c, i) => (
+                          <span key={c.field}>
+                            {i > 0 && ', '}
+                            <strong>{c.field}</strong> (<code>{c.from}</code> → <code>{c.to}</code>)
+                          </span>
+                        ))}.</>
+                    }
+                  </p>
+                  <textarea
+                    className="feedback-input"
+                    value={step2Feedback}
+                    onChange={(e) => setStep2Feedback(e.target.value)}
+                    placeholder="Explain what & why you adjusted — e.g. 'theme should be emotional_value because the ad highlights trust, not earnings'"
+                    rows={3}
+                  />
+                  <p className="hint">
+                    The AI uses this feedback to make better suggestions for future ads.
+                  </p>
+                </div>
+              )}
 
               <div className="step-card">
                 <h3>Step 3 — Archive Check</h3>
@@ -157,13 +338,7 @@ export default function AnalysisScreen({ uploadData, onResult, onBack }) {
                 <button className="btn-secondary" onClick={onBack}>Back</button>
                 <button
                   className="btn-primary"
-                  onClick={() => onResult({
-                    analysis,
-                    generatedName: analysis.step5_generated_name,
-                    imageDescription: analysis.step1_image_description,
-                    confidence: analysis.step4_confidence,
-                    imagePreview: uploadData.preview,
-                  })}
+                  onClick={onResult}
                 >
                   Edit & Save
                 </button>

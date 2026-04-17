@@ -69,14 +69,23 @@ within the chosen theme.
 ### 5. asset_variation
 Format for statics: \`[static_template]_[NEED_HELP]\`
 Valid static_template values (choose exactly one based on the image):
-\`text_graphic\` | \`sitter_profile\` | \`photo_outline\` | \`sitter_photo\`
+\`insight_led\` | \`sitter_profile\` | \`proof_based\` | \`product_mockup\` | \`tear_off_flyer\` | \`photo_outline\` | \`airdrop\` | \`meme\` | \`quote\` | \`parent_concerns\` | \`babysitter_available\` | \`babysitter_wanted\` | \`numbers_first\`
 Rules:
-- Primarily text on graphic background → \`text_graphic\`
+- Numbers, statistics, or percentages prominent → \`numbers_first\`
 - Sitter profile card with photo and details → \`sitter_profile\`
 - Photo with graphic outline or frame → \`photo_outline\`
-- Single photo of a sitter, minimal graphic elements → \`sitter_photo\`
+- Insight, fact, or data-driven angle → \`insight_led\`
+- Testimonial, review, or proof → \`proof_based\`
+- App or product mockup / screenshot → \`product_mockup\`
+- Tear-off flyer style → \`tear_off_flyer\`
+- AirDrop notification style → \`airdrop\`
+- Meme format → \`meme\`
+- Highlighted quote / pull quote → \`quote\`
+- Parent concerns / worries angle → \`parent_concerns\`
+- "Babysitter available" angle → \`babysitter_available\`
+- "Babysitter wanted" angle → \`babysitter_wanted\`
 Always generate: [chosen_template]_[NEED_HELP]
-Example: \`text_graphic_[NEED_HELP]\`
+Example: \`numbers_first_[NEED_HELP]\`
 ### 6. message
 A short interpretation of the primary message of the ad.
 Rules:

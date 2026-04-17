@@ -11,21 +11,36 @@ export default function App() {
   const [tab, setTab] = useState('Upload');
   const [screen, setScreen] = useState('upload'); // upload | analysis | edit
   const [uploadData, setUploadData] = useState(null);
-  const [analysisResult, setAnalysisResult] = useState(null);
+
+  // Lifted state — preserved across analysis ↔ edit navigation
+  const [analysis, setAnalysis] = useState(null);             // current (possibly edited) analysis
+  const [originalAnalysis, setOriginalAnalysis] = useState(null); // unchanged copy from API
+  const [step2Feedback, setStep2Feedback] = useState('');     // free-text feedback when fields edited
 
   function handleAnalyze(data) {
+    // Fresh upload — clear any previous analysis state
     setUploadData(data);
+    setAnalysis(null);
+    setOriginalAnalysis(null);
+    setStep2Feedback('');
     setScreen('analysis');
   }
 
-  function handleResult(result) {
-    setAnalysisResult(result);
+  function handleResult() {
+    // User clicked "Edit & Save" — go to edit screen, keep state
     setScreen('edit');
+  }
+
+  function handleBackFromEdit() {
+    // Return to analysis view, preserving all edits + feedback
+    setScreen('analysis');
   }
 
   function handleReset() {
     setUploadData(null);
-    setAnalysisResult(null);
+    setAnalysis(null);
+    setOriginalAnalysis(null);
+    setStep2Feedback('');
     setScreen('upload');
   }
 
@@ -62,14 +77,27 @@ export default function App() {
         ) : screen === 'analysis' ? (
           <AnalysisScreen
             uploadData={uploadData}
+            analysis={analysis}
+            setAnalysis={setAnalysis}
+            originalAnalysis={originalAnalysis}
+            setOriginalAnalysis={setOriginalAnalysis}
+            step2Feedback={step2Feedback}
+            setStep2Feedback={setStep2Feedback}
             onResult={handleResult}
             onBack={handleReset}
           />
         ) : screen === 'edit' ? (
           <EditScreen
-            result={analysisResult}
-            onSave={() => {}}
-            onBack={handleReset}
+            result={{
+              analysis,
+              generatedName: analysis?.step5_generated_name,
+              imageDescription: analysis?.step1_image_description,
+              confidence: analysis?.step4_confidence,
+              imagePreview: uploadData?.preview,
+              step2Feedback,
+            }}
+            onSave={handleReset}
+            onBack={handleBackFromEdit}
           />
         ) : null}
       </main>

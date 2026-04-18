@@ -30,12 +30,12 @@ const FIELD_OPTIONS = {
   ],
 };
 
-const NEED_HELP = '[NEED_HELP]';
+const NEED_HELP = '[VARIATION_NUMBER]';
 
-// Strip the _[NEED_HELP] suffix to show clean template name in the dropdown
+// Strip the _[VARIATION_NUMBER] suffix to show clean template name in the dropdown
 function stripVariationSuffix(value) {
   if (!value) return '';
-  return value.replace(/_\[NEED_HELP\]$/, '').replace(/_\d+$/, '');
+  return value.replace(/_\[VARIATION_NUMBER\]$/, '').replace(/_\[NEED_HELP\]$/, '').replace(/_\d+$/, '');
 }
 
 function buildVariationValue(template) {
@@ -246,7 +246,7 @@ export default function AnalysisScreen({
                                 onChange={(e) => updateField(field, buildVariationValue(e.target.value))}
                               >
                                 {options.map((opt) => (
-                                  <option key={opt} value={opt}>{opt}_[NEED_HELP]</option>
+                                  <option key={opt} value={opt}>{opt}_[VARIATION_NUMBER]</option>
                                 ))}
                               </select>
                             ) : options ? (
@@ -331,7 +331,7 @@ export default function AnalysisScreen({
 
               <div className="step-card step-card-output">
                 <h3>Step 5 — Generated Name</h3>
-                <GeneratedName name={analysis.step5_generated_name} confidence={analysis.step4_confidence} />
+                <GeneratedName name={analysis.step5_generated_name} />
               </div>
 
               <div className="analysis-actions">
@@ -351,37 +351,10 @@ export default function AnalysisScreen({
   );
 }
 
-function GeneratedName({ name, confidence }) {
+function GeneratedName({ name }) {
   if (!name) return null;
 
-  // Replace [NEED_HELP] with specific field names based on confidence
-  let displayName = name;
-
-  // Check which fields are uncertain and replace accordingly
-  if (confidence) {
-    // If asset_variation is uncertain, replace [NEED_HELP] with [VARIATION_NUMBER]
-    if (confidence.asset_variation?.status === 'uncertain') {
-      displayName = displayName.replace('[NEED_HELP]', '[VARIATION_NUMBER]');
-    }
-    // If message is uncertain, replace message part with [MESSAGE]
-    if (confidence.message?.status === 'uncertain') {
-      const parts = displayName.split('-');
-      if (parts.length > 0) {
-        const lastPart = parts[parts.length - 1];
-        if (lastPart !== '[MESSAGE]' && !lastPart.includes('[')) {
-          parts[parts.length - 1] = '[MESSAGE]';
-          displayName = parts.join('-');
-        }
-      }
-    }
-  }
-
-  // Default: replace [NEED_HELP] with [VARIATION_NUMBER]
-  if (displayName.includes('[NEED_HELP]')) {
-    displayName = displayName.replace('[NEED_HELP]', '[VARIATION_NUMBER]');
-  }
-
-  const parts = displayName.split(/(\[[A-Z_]+\])/);
+  const parts = name.split(/(\[[A-Z_]+\])/);
   return (
     <div className="generated-name">
       {parts.map((part, i) =>

@@ -52,10 +52,10 @@ the archive of previously approved ads that you receive with each analysis.
 **Format (fixed order, separated by \`-\`):**
 asset_type-content_type-theme-sub_theme-asset_variation-message
 **Example:**
-static-graphic-practical_support-help_tasks-text_graphic_[NEED_HELP]-find_trusted_sitter
-**Note about [NEED_HELP]:**
+static-graphic-practical_support-help_tasks-text_graphic_[VARIATION_NUMBER]-find_trusted_sitter
+**Note about [VARIATION_NUMBER]:**
 The asset_variation field always ends with a variation_number that the user
-fills in themselves. Always generate the name with the literal placeholder [NEED_HELP]
+fills in themselves. Always generate the name with the literal placeholder [VARIATION_NUMBER]
 at that position. The app shows this in red so the user knows they need to fill it with a number (1, 2, 3…).
 ---
 ## Field Specifications
@@ -94,7 +94,7 @@ Valid values (choose exactly one):
 Choose the sub_theme that most specifically describes the core of the message
 within the chosen theme.
 ### 5. asset_variation
-Format for statics: \`[static_template]_[NEED_HELP]\`
+Format for statics: \`[static_template]_[VARIATION_NUMBER]\`
 Valid static_template values (choose exactly one based on the image):
 \`insight_led\` | \`sitter_profile\` | \`proof_based\` | \`product_mockup\` | \`tear_off_flyer\` | \`photo_outline\` | \`airdrop\` | \`meme\` | \`quote\` | \`parent_concerns\` | \`babysitter_available\` | \`babysitter_wanted\` | \`numbers_first\`
 Rules:
@@ -111,8 +111,8 @@ Rules:
 - Parent concerns / worries angle → \`parent_concerns\`
 - "Babysitter available" angle → \`babysitter_available\`
 - "Babysitter wanted" angle → \`babysitter_wanted\`
-Always generate: [chosen_template]_[NEED_HELP]
-Example: \`numbers_first_[NEED_HELP]\`
+Always generate: [chosen_template]_[VARIATION_NUMBER]
+Example: \`numbers_first_[VARIATION_NUMBER]\`
 ### 6. message
 A short interpretation of the primary message of the ad.
 Rules:
@@ -161,7 +161,7 @@ GENERATED NAME:
 - Always lowercase in the name
 - Always underscores, never spaces
 - Never skip a field
-- [NEED_HELP] stands always literal in the output, never a number
+- [VARIATION_NUMBER] stands always literal in the output, never a number
 
 ## IMPORTANT: Answer in JSON
 ALWAYS answer in the following JSON format (no markdown, pure JSON):
@@ -202,45 +202,34 @@ function saveArchiveFile(entries) {
 }
 
 // ── ClickUp integration ──────────────────────────────────────────────────────
-async function createClickUpTask(analysis, image_base64, media_type) {
+// Called after a user approves and saves an ad to the archive.
+async function createClickUpTask({ approved_name, generated_name, image_description, feedback, image_preview, content_type, theme }) {
   const token = process.env.CLICKUP_API_TOKEN;
   if (!token) {
     console.warn('CLICKUP_API_TOKEN not set — skipping ClickUp task creation');
     return;
   }
 
-  const title = analysis.step5_generated_name || 'Unnamed Ad';
+  const nameChanged = generated_name && generated_name !== approved_name;
 
-  const fc   = analysis.step2_field_classification || {};
-  const conf = analysis.step4_confidence           || {};
-  const fields = ['content_type', 'theme', 'sub_theme', 'asset_variation', 'message'];
-
-  const classificationLines = fields.map(f => {
-    const val    = fc[f]?.value  || '—';
-    const reason = fc[f]?.reason || '—';
-    return `• ${f}: ${val} — ${reason}`;
-  }).join('\n');
-
-  const confidenceLines = fields.map(f => {
-    const status = conf[f]?.status || '—';
-    const note   = conf[f]?.note   || '—';
-    const icon   = status === 'certain' ? '✅' : '⚠️';
-    return `• ${f}: ${icon} ${status} — ${note}`;
-  }).join('\n');
-
-  const description = [
+  const descriptionParts = [
     '📸 Image Description',
-    analysis.step1_image_description || '—',
+    image_description || '—',
     '',
-    '🏷️ Field Classification',
-    classificationLines,
-    '',
-    '📁 Archive Check',
-    analysis.step3_archive_check || '—',
-    '',
-    '🔍 Confidence',
-    confidenceLines,
-  ].join('\n');
+    '🏷️ Classification',
+    `• content_type: ${content_type || '—'}`,
+    `• theme: ${theme || '—'}`,
+  ];
+
+  if (nameChanged) {
+    descriptionParts.push('', '✏️ Name Edit', `• AI generated: ${generated_name}`, `• Approved: ${approved_name}`);
+  }
+
+  if (feedback) {
+    descriptionParts.push('', '💬 Feedback', feedback);
+  }
+
+  const description = descriptionParts.join('\n');
 
   const clickupRes = await fetch('https://api.clickup.com/api/v2/list/901522863692/task', {
     method: 'POST',
@@ -248,7 +237,7 @@ async function createClickUpTask(analysis, image_base64, media_type) {
       'Authorization': token,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ name: title, description }),
+    body: JSON.stringify({ name: approved_name, description }),
   });
 
   if (!clickupRes.ok) {
@@ -257,28 +246,32 @@ async function createClickUpTask(analysis, image_base64, media_type) {
   }
 
   const task = await clickupRes.json();
-  console.log(`ClickUp task created: ${task.id} — ${title}`);
+  console.log(`ClickUp task created: ${task.id} — ${approved_name}`);
 
-  // Attach the ad image to the task
-  if (image_base64 && task.id) {
+  // Attach the ad image to the task (image_preview is a data URL)
+  if (image_preview && task.id) {
     try {
-      const mimeType = media_type || 'image/jpeg';
-      const ext = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
-      const imageBuffer = Buffer.from(image_base64, 'base64');
-      const form = new FormData();
-      form.append('attachment', new Blob([imageBuffer], { type: mimeType }), `ad_${task.id}.${ext}`);
+      const match = image_preview.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) {
+        const mimeType = match[1];
+        const base64   = match[2];
+        const ext = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
+        const imageBuffer = Buffer.from(base64, 'base64');
+        const form = new FormData();
+        form.append('attachment', new Blob([imageBuffer], { type: mimeType }), `ad_${task.id}.${ext}`);
 
-      const attachRes = await fetch(`https://api.clickup.com/api/v2/task/${task.id}/attachment`, {
-        method: 'POST',
-        headers: { 'Authorization': token },
-        body: form,
-      });
+        const attachRes = await fetch(`https://api.clickup.com/api/v2/task/${task.id}/attachment`, {
+          method: 'POST',
+          headers: { 'Authorization': token },
+          body: form,
+        });
 
-      if (!attachRes.ok) {
-        const errText = await attachRes.text();
-        console.error(`ClickUp attachment failed ${attachRes.status}: ${errText}`);
-      } else {
-        console.log(`ClickUp image attached to task ${task.id}`);
+        if (!attachRes.ok) {
+          const errText = await attachRes.text();
+          console.error(`ClickUp attachment failed ${attachRes.status}: ${errText}`);
+        } else {
+          console.log(`ClickUp image attached to task ${task.id}`);
+        }
       }
     } catch (err) {
       console.error('ClickUp attachment error:', err.message);
@@ -383,11 +376,6 @@ app.post('/api/analyze', async (req, res) => {
     }
 
     res.json({ analysis: parsed });
-
-    // Fire-and-forget: create ClickUp task without blocking the response
-    createClickUpTask(parsed, image_base64, media_type).catch(err =>
-      console.error('ClickUp task creation failed:', err.message)
-    );
   } catch (error) {
     console.error('Analysis error:', error);
     res.status(500).json({ error: error.message });
@@ -443,11 +431,17 @@ app.post('/api/archive', async (req, res) => {
         [image_description, generated_name || null, approved_name, feedback || null, image_preview || null, content_type || null, theme || null]
       );
       const count = await pool.query('SELECT COUNT(*) FROM archive');
+      // Fire-and-forget: create ClickUp task now that the ad is approved
+      createClickUpTask({ approved_name, generated_name, image_description, feedback, image_preview, content_type, theme })
+        .catch(err => console.error('ClickUp task creation failed:', err.message));
       return res.json({ success: true, count: parseInt(count.rows[0].count) });
     }
     const archive = loadArchiveFile();
     archive.push({ image_description, generated_name: generated_name || null, approved_name, feedback: feedback || null, image_preview: image_preview || null, content_type: content_type || null, theme: theme || null, saved_at: new Date().toISOString() });
     saveArchiveFile(archive);
+    // Fire-and-forget: create ClickUp task now that the ad is approved
+    createClickUpTask({ approved_name, generated_name, image_description, feedback, image_preview, content_type, theme })
+      .catch(err => console.error('ClickUp task creation failed:', err.message));
     res.json({ success: true, count: archive.length });
   } catch (err) {
     console.error('Archive save error:', err);

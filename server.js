@@ -42,6 +42,35 @@ app.use(express.json({ limit: '20mb' }));
 
 const client = new Anthropic();
 
+// ── Usage & cost logging ─────────────────────────────────────────────────────
+const PRICING = {
+  // claude-sonnet-4-20250514 — per 1M tokens (USD)
+  input_per_million:  3.00,
+  output_per_million: 15.00,
+};
+const USD_TO_EUR = 0.92;
+
+function logUsage({ model, input_tokens, output_tokens, response_time_ms }) {
+  const inputCostUSD  = (input_tokens  / 1_000_000) * PRICING.input_per_million;
+  const outputCostUSD = (output_tokens / 1_000_000) * PRICING.output_per_million;
+  const totalCostUSD  = inputCostUSD + outputCostUSD;
+  const totalCostEUR  = totalCostUSD * USD_TO_EUR;
+
+  console.log('');
+  console.log('┌─────────────────────────────────────────┐');
+  console.log('│           API USAGE — per run            │');
+  console.log('├─────────────────────────────────────────┤');
+  console.log(`│  Model        : ${model}`);
+  console.log(`│  Input tokens : ${input_tokens.toLocaleString()}`);
+  console.log(`│  Output tokens: ${output_tokens.toLocaleString()}`);
+  console.log(`│  Response time: ${(response_time_ms / 1000).toFixed(2)}s`);
+  console.log(`│  Cost (USD)   : $${totalCostUSD.toFixed(5)}`);
+  console.log(`│  Cost (EUR)   : €${totalCostEUR.toFixed(5)}`);
+  console.log('└─────────────────────────────────────────┘');
+  console.log('');
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 const SYSTEM_PROMPT = `# SYSTEM — Ad Name Builder Agent (Sitly, Static Ads)
 ## Role
 You are the Ad Naming Agent for Sitly. You analyze static advertisement images
@@ -352,7 +381,17 @@ app.post('/api/analyze', async (req, res) => {
       }
     }
 
+    const t0 = Date.now();
     const response = await callWithRetry();
+    const response_time_ms = Date.now() - t0;
+
+    // Log usage + cost after every run
+    logUsage({
+      model:           response.model,
+      input_tokens:    response.usage.input_tokens,
+      output_tokens:   response.usage.output_tokens,
+      response_time_ms,
+    });
 
     const text = response.content[0].text;
 
